@@ -1,0 +1,357 @@
+---
+title: "Milestone Report of Corpus"
+author: "Mohib"
+date: "4/19/2020"
+output: html_document
+---
+
+
+## Summary:
+
+The report was generated to get a better idea of the corpus of 'Blog', 'News' and 'Twitter' data that we were provided. The broad outline of the analysis is determining the total words, lines, frequency of different words in the 3 files as well as a joint comparison of all in pictorial form. It leads us to believe that their are a lot of common words among the various files as well which was earlier percieved to be very different as the data is all from very different sources where communication styles vary a lot. At the end, a brief idea of the future model design for the word prediction app.
+
+```{r , include=FALSE}
+library(tokenizers)
+library(tidyverse)
+library(dplyr)
+library(data.table)
+library(tm)
+library(janeaustenr)
+library(tidytext)
+library(quanteda)
+library(SnowballC)
+library(stringi)
+library(gridExtra)
+library(readtext)
+```
+
+## Loading the Data Files:
+
+After loading the requisite packages we start our work.
+
+```{r, error=FALSE}
+setwd("F:/DS/Course 10 Capstone Project")
+
+
+## Loading all data from blog to get an accurate picture
+text_news <- readLines("en_US.news.txt")
+text_twitter <- readLines("en_US.twitter.txt")
+text_blog <- readLines("en_US.blogs.txt")
+
+```
+ 
+## Line Count:
+
+```{r, }
+## Determining the total number of lines in each document
+length(text_news)
+length(text_twitter)
+length(text_blog)
+```
+
+The total lines in each document shows news file to have "77259" lines, twitter file to have "2360148" lines and blog file to have "899288" lines. 
+
+## Word Count: 
+
+```{r}
+## Determing the total number of words in each document
+sum(stri_count_words(text_news))
+sum(stri_count_words(text_twitter))
+sum(stri_count_words(text_blog))
+```
+
+The total words in each document shows news file to have "2693898" words, twitter file to have "30218125" words and blog file to have "38154238" words. 
+
+## Sampling Data:
+
+The total lines and words show the document to be pretty huge so we'll be going for sample of the data for analysis. The sample size we'll be taking will be 60% of the original data.
+
+```{r}
+## Now take sample of the data to improve the speed as dataset is huge.
+sample_size = 0.6
+text_blog <- sample(text_blog, size=sample_size* length(text_blog))
+text_news <- sample(text_news, size=sample_size* length(text_news))
+text_twitter <- sample(text_twitter, size=sample_size* length(text_twitter))
+```
+
+## Cleaning the Data:
+
+The next step is to put all the unrequired data in the trash that inclues profane words, numbers, single letter words etc. For this I first downloaded the profane library from an account in Github, the link is provied below.
+
+```{r}
+##### Setting up a prfanity word library taken originally from https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/blob/master/en
+profane_lib <- paste(readLines("profanity_library.txt"))
+```
+
+Now setting up a function for data cleaning:
+
+```{r}
+## Loading all data from blog to get an accurate picture
+clean_text <- function(x)
+{
+  x <- tolower(x)
+  x <- removeNumbers(x)
+  x <- removePunctuation(x)
+  x <- removeWords(x, stopwords())
+  x <- removeWords(x, profane_lib)
+  x <- stripWhitespace(x)
+  x <- stri_trans_general(x, "latin-ascii")
+  x <- stemDocument(x)
+  x <- gsub(" *\\b[[:alpha:]]{1}\\b *", " ", x)
+}
+```
+
+Applying the function:
+
+```{r}
+## Cleaning up the text with the made function
+clean_blog <- clean_text(text_blog)
+clean_news <- clean_text(text_news)
+clean_twitter <- clean_text(text_twitter)
+```
+
+## Analyzing Ngrams:
+
+From here onwards I will be studying the ngrams of separately i.e one word, two words and three words of all the files. Each will have common 4 steps:
+
+1. Tokenization
+2. Adjusting the ngrams in tables with their frequencies
+3. Joining the Tables of all 3 files for comparison
+4. Graphical Interpretation 
+
+Now, lets get started.
+
+# 1-Gram:
+
+1. Tokeniztion:
+
+```{r}
+## Tokenizing the words (cOUNTING THE WORDS)
+words_blog <- tokenize_words(clean_blog)
+words_news <- tokenize_words(clean_news)
+words_twitter <- tokenize_words(clean_twitter)
+```
+
+2. Adjusting the ngrams in tables:
+
+```{r}
+## Adjusting them in a table in descending order alongwith their respective frequency
+tab_blog <- table(unlist(words_blog))
+tab_blog<- data.frame(word = names(tab_blog), frequency = as.numeric(tab_blog))
+tab_blog <- arrange(tab_blog, desc(frequency))
+
+tab_news <- table (unlist(words_news))
+tab_news<- data.frame(word = names(tab_news), frequency = as.numeric(tab_news))
+tab_news <- arrange(tab_news, desc(frequency))
+
+tab_twitter <- table(unlist(words_twitter))
+tab_twitter<- data.frame(word = names(tab_twitter), frequency = as.numeric(tab_twitter))
+tab_twitter<- arrange(tab_twitter, desc(frequency))
+```
+
+3. Joining the Tables:
+
+```{r}
+## Joining the tables together for better comparisons of the words
+
+joint_word_tab <- list(tab_news, tab_twitter)
+joint_word_tab <- joint_word_tab %>% reduce(full_join, by = "word")
+joint_word_tab <- list(joint_word_tab, tab_blog)
+joint_word_tab <- joint_word_tab %>% reduce(full_join, by = "word")
+joint_word_tab [is.na(joint_word_tab)] <- 0
+joint_word_tab <- joint_word_tab %>% mutate(frequency = (frequency.x+frequency.y+frequency))
+joint_word_tab <- select(joint_word_tab, -c(frequency.x, frequency.y))
+joint_word_tab <- arrange(joint_word_tab, desc(frequency))
+```
+
+4. Graphical Interpretation:
+
+```{r}
+########Making bargraphs to better get an idea of the words frequency of SINGULAR WORDS
+plot_twitter_words <- ggplot(head(tab_twitter,15), aes(reorder(word,frequency), frequency)) +
+  geom_bar(stat = "identity") + coord_flip() +
+  xlab("Words") + ylab("Frequency") +
+  ggtitle("Twitter")
+
+plot_news_words <- ggplot(head(tab_news,15), aes(reorder(word,frequency), frequency)) +
+  geom_bar(stat = "identity") + coord_flip() +
+  xlab("Words") + ylab("Frequency") +
+  ggtitle("News")
+
+plot_blog_words <- ggplot(head(tab_blog,15), aes(reorder(word,frequency), frequency)) +
+  geom_bar(stat = "identity") + coord_flip() +
+  xlab("Words") + ylab("Frequency") +
+  ggtitle("Blog")
+
+word_comparison <- grid.arrange(plot_blog_words, plot_news_words, plot_twitter_words, ncol = 3)
+```
+
+The above graph shows the relationship between various files in respect to the word frequencies. The following graph will intertwine all the files and show the words in order of frequency:
+
+```{r}
+plot_joint_words <- ggplot(head(joint_word_tab,15), aes(reorder(word,frequency), frequency)) +
+  geom_bar(stat = "identity") + coord_flip() +
+  xlab("Words") + ylab("Frequency") +
+  ggtitle("Joint Comparison Words")
+plot_joint_words
+```
+
+# 2-Gram:
+
+1. Tokenization:
+
+```{r}
+# News text
+bigram_news <- tokenize_ngrams(  x = clean_news,  n = 2L,  n_min = 2L,  simplify = FALSE)
+#blog text
+bigram_blog <- tokenize_ngrams(  x = clean_blog,  n = 2L,  n_min = 2L,  simplify = FALSE)
+#twitter text
+bigram_twitter <- tokenize_ngrams(x = clean_twitter,  n = 2L,  n_min = 2L,  simplify = FALSE)
+```
+
+2. Adjusting the 2-grams in tables:
+```{r}
+tab_news_bigram<- table(unlist(bigram_news))
+tab_news_bigram<- data.frame(bigram = names(tab_news_bigram), frequency = as.numeric(tab_news_bigram))
+tab_news_bigram <- arrange(tab_news_bigram, desc(frequency))
+
+tab_blog_bigram <- table(unlist(bigram_blog))
+tab_blog_bigram<- data.frame(bigram = names(tab_blog_bigram), frequency = as.numeric(tab_blog_bigram))
+tab_blog_bigram <- arrange(tab_blog_bigram, desc(frequency))
+
+tab_twitter_bigram <- table(unlist(bigram_twitter))
+tab_twitter_bigram <- data.frame(bigram = names(tab_twitter_bigram ), frequency = as.numeric(tab_twitter_bigram))
+tab_twitter_bigram  <- arrange(tab_twitter_bigram , desc(frequency))
+```
+
+3. Joining the Tables:
+
+```{r}
+## Joining the tables together for better comparisons of the bigrams
+
+joint_bigram_tab <- list(tab_twitter_bigram , tab_news_bigram)
+joint_bigram_tab <- joint_bigram_tab %>% reduce(full_join, by = "bigram")
+joint_bigram_tab <- list(joint_bigram_tab , tab_blog_bigram)
+joint_bigram_tab <- joint_bigram_tab %>% reduce(full_join, by = "bigram")
+joint_bigram_tab [is.na(joint_bigram_tab)] <- 0
+joint_bigram_tab <- joint_bigram_tab %>% mutate(frequency = (frequency.x+frequency.y+frequency))
+joint_bigram_tab <- select(joint_bigram_tab, -c(frequency.x, frequency.y))
+joint_bigram_tab <- arrange(joint_bigram_tab, desc(frequency))
+```
+
+4. Graphical Interpretation:
+
+```{r}
+########Making bargraphs to better get an idea of the words frequency of BIGRAMS
+plot_twitter_bigram <- ggplot(head(tab_twitter_bigram,15), aes(reorder(bigram,frequency), frequency)) +
+  geom_bar(stat = "identity") + coord_flip() +
+  xlab("Bigrams") + ylab("Frequency") +
+  ggtitle("Twitter")
+
+plot_news_bigram <- ggplot(head(tab_news_bigram,15), aes(reorder(bigram,frequency), frequency)) +
+  geom_bar(stat = "identity") + coord_flip() +
+  xlab("Bigrams") + ylab("Frequency") +
+  ggtitle("News")
+
+plot_blog_bigram <- ggplot(head(tab_blog_bigram,15), aes(reorder(bigram,frequency), frequency)) +
+  geom_bar(stat = "identity") + coord_flip() +
+  xlab("Bigrams") + ylab("Frequency") +
+  ggtitle("Blog")
+
+biagram_comparison <- grid.arrange(plot_blog_bigram, plot_news_bigram, plot_twitter_bigram, ncol = 3)
+```
+
+The above graph shows the relationship between various files in respect to the word frequencies. The following graph will intertwine all the files and show the words in order of frequency:
+
+```{r}
+plot_joint_bigram <- ggplot(head(joint_bigram_tab,15), aes(reorder(bigram,frequency), frequency)) +
+  geom_bar(stat = "identity") + coord_flip() +
+  xlab("Bigrams") + ylab("Frequency") +
+  ggtitle("Joint Comparison Bigram")
+plot_joint_bigram
+```
+
+# 3-Gram:
+
+1. Tokenization: 
+
+```{r}
+# News text
+trigram_news <- tokenize_ngrams(  x = clean_news,  n = 3L,  n_min = 3L,  simplify = FALSE)
+#blog text
+trigram_blog <- tokenize_ngrams(  x = clean_blog,  n = 3L,  n_min = 3L,  simplify = FALSE)
+#twitter text
+trigram_twitter <- tokenize_ngrams(  x = clean_twitter,  n = 3L,  n_min = 3L,  simplify = FALSE)
+```
+
+2. Adjusting the 3-grams in tables:
+
+```{r}
+tab_news_trigram<- table(unlist(trigram_news))
+tab_news_trigram<- data.frame(trigram = names(tab_news_trigram), frequency = as.numeric(tab_news_trigram))
+tab_news_trigram <- arrange(tab_news_trigram, desc(frequency))
+
+tab_blog_trigram <- table(unlist(trigram_blog))
+tab_blog_trigram<- data.frame(trigram = names(tab_blog_trigram), frequency = as.numeric(tab_blog_trigram))
+tab_blog_trigram <- arrange(tab_blog_trigram, desc(frequency))
+
+tab_twitter_trigram <- table(unlist(trigram_twitter))
+tab_twitter_trigram <- data.frame(trigram = names(tab_twitter_trigram ), frequency = as.numeric(tab_twitter_trigram))
+tab_twitter_trigram  <- arrange(tab_twitter_trigram , desc(frequency))
+```
+
+3. Joining the Tables:
+
+```{r}
+## Joining the tables together for better comparisons of the trigrams
+
+joint_trigram_tab <- list(tab_twitter_trigram , tab_news_trigram)
+joint_trigram_tab <- joint_trigram_tab %>% reduce(full_join, by = "trigram")
+joint_trigram_tab <- list(joint_trigram_tab , tab_blog_trigram)
+joint_trigram_tab <- joint_trigram_tab %>% reduce(full_join, by = "trigram")
+joint_trigram_tab [is.na(joint_trigram_tab)] <- 0
+joint_trigram_tab <- joint_trigram_tab %>% mutate(frequency = (frequency.x+frequency.y+ frequency))
+joint_trigram_tab <- select(joint_trigram_tab, -c(frequency.x, frequency.y))
+joint_trigram_tab <- arrange(joint_trigram_tab, desc(frequency))
+```
+
+4. Graphical Interpretation:
+
+```{r}
+########Making bargraphs to better get an idea of the words frequency of TRIGRAMS
+plot_twitter_trigram <- ggplot(head(tab_twitter_trigram,15), aes(reorder(trigram,frequency), frequency)) +
+  geom_bar(stat = "identity") + coord_flip() +
+  xlab("trigrams") + ylab("Frequency") +
+  ggtitle("Twitter")
+
+plot_news_trigram <- ggplot(head(tab_news_trigram,15), aes(reorder(trigram,frequency), frequency)) +
+  geom_bar(stat = "identity") + coord_flip() +
+  xlab("trigrams") + ylab("Frequency") +
+  ggtitle("News")
+
+plot_blog_trigram <- ggplot(head(tab_blog_trigram,15), aes(reorder(trigram,frequency), frequency)) +
+  geom_bar(stat = "identity") + coord_flip() +
+  xlab("trigrams") + ylab("Frequency") +
+  ggtitle("Blog")
+
+trigram_comparison <- grid.arrange(plot_blog_trigram, plot_news_trigram, plot_twitter_trigram, ncol = 3)
+
+```
+
+Now, again the following graph will intertwine all the files and show the words in order of frequency:
+
+```{r}
+plot_joint_trigram <- ggplot(head(joint_trigram_tab,15), aes(reorder(trigram,frequency), frequency)) +
+  geom_bar(stat = "identity") + coord_flip() +
+  xlab("trigrams") + ylab("Frequency") +
+  ggtitle("Joint Comparison Trigram")
+plot_joint_trigram 
+```
+
+## Conclusion:
+
+From the analysis of the corpus we come to know that frequencies are high for the same words and assumed that it will be same for lesser frequent words as well. Moreover, it is also found that the frequency tends to drop a lot as the n value of the ngram model is increased. However, it is pertinent to understand here that even though the size of our corpus is very huge yet we can't cover all the eventualities of word order, therefore a model needs to be designed which would would work for even those instances which do not occur in any of the files provided to us.
+
+## Future Plans:
+
+I intend to use the Katz-Back off model for future design of model to be able to predict the instances which do not occur in the data that has been provided to us. To achieve that I intend to further modify my code to reduce verbosity and increase the calculating speed of my final app.
